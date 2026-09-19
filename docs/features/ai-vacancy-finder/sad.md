@@ -4,7 +4,7 @@ owner: "Serhii Lyzun"
 reviewers: []
 updated_at: "2026-09-19"
 feature_size: "L"
-target_surfaces: []
+target_surfaces: [cli]
 ---
 
 # Software Architecture Document — ai-vacancy-finder
@@ -87,7 +87,27 @@ C4Context
 
 ## 4. Solution strategy
 
-<!-- pending -->
+**Target surface.** `cli`: a command-line program the job seeker runs on demand, with no UI and no schedule (scheduled runs are a non-goal; a schedule later is the same command started by something else). Recorded in the frontmatter as `target_surfaces: [cli]`; one surface, so §5 draws one CLI container and the `screens` stage is not needed.
+
+**Top strategic choices (the seeds for ADRs):**
+
+1. **Read sources in two phases, hydrating lazily** — a source lists cards first and the pipeline fetches a full vacancy only when it is about to be judged, so repeat runs stay cheap and quiet toward the source and the 5-minute budget holds. Serves quality goals 2 and 3; constrained by the 1 request per second pace. → `adr/0001-read-sources-in-two-phases-hydrating-lazily.md`
+2. **Return source failures as values alongside partial results** — a source reports blocked, throttled, failed or empty as a typed value next to what it did read, so nothing read is lost and no cause is swallowed. Serves quality goal 1. → `adr/0002-return-source-failures-as-values-alongside-partial-results.md`
+3. **Record one disposition per read vacancy and derive the report from them** — every read vacancy ends in exactly one bucket, so the coverage report adds up by construction and exists even for a failed run. Serves quality goal 1. → `adr/0003-record-one-disposition-per-read-vacancy-and-derive-the-report.md`
+4. **Judge each vacancy in its own schema-checked call** — a failure or an injection attempt in one vacancy touches no other, and service-level failures stop judging loudly. Serves quality goal 2 and fit consistency. → `adr/0004-judge-each-vacancy-in-its-own-schema-checked-call.md`
+
+**How a run flows (derived from the acceptance criteria, not a choice):**
+
+1. **Preflight** — validate the inputs (AC-02), read the CV (AC-03), require the AI key (AC-05) and open the seen database. Any failure stops here, before a single request, with a plain message.
+2. **List** — the source returns cards, an optional expected count and an optional stop (ADR 0001, 0002).
+3. **Classify on cards** — drop what is certainly older than the posted-since date, skip vacancies already shown (by source name plus job number) and reposts (by company plus title), and check salary when the card states it. Each read vacancy gets its disposition in the AC-10 order (ADR 0003).
+4. **Order** — candidates go newest first; with "show everything", new ones first and then those shown before, newest first (AC-17, AC-21).
+5. **Hydrate and judge, one vacancy at a time** — fetch the full vacancy, check its salary if the card did not state it, judge it, and stop when the judging limit is filled, the candidates run out, or judging fails at service level (ADR 0004).
+6. **Close the accounts** — every vacancy not reached becomes "not judged" with its cause.
+7. **Render** — the list (untagged vacancies by fit, then tagged ones by fit), the loud warnings and the coverage report, all derived from the dispositions.
+8. **Mark seen** — only after rendering, only vacancies that were shown, in one transaction (AC-22). If the process dies between rendering and marking, a vacancy may come back as new, which is the safe direction.
+
+A vacancy counts as seen only once it has been shown, so the seen memory never hides a vacancy that was dropped, not judged or lost to a failure.
 
 ## 5. Building block view
 
