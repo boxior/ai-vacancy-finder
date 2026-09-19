@@ -336,7 +336,25 @@ Each top-3 goal from §1 expanded into a scenario, plus two further scenarios fr
 
 ## 11. Risks and technical debt
 
-<!-- pending -->
+| Risk / debt | Severity | Mitigation | Owner |
+|---|---|---|---|
+| Open architectural decision: what LinkedIn's real public pages show (a plain posted date or only a rough age and its granularity, results per page, how pay appears, which signs mean blocked, whether a match count is stated, which sign shows a cut-off description, whether a date ever goes missing) | Open question | Resolve before `sdd:implement`; a prototype over saved real pages fills `test/fixtures/` and the parser needs them. The design assumes the worst case (rough ages only, pay often missing, no stated match count) and tolerates any real outcome (ADR 0001, ADR 0007) | Serhii Lyzun |
+| LinkedIn changes its pages or blocks the traffic; reading them is against its terms (accepted knowingly, `docs/idea-brief.md` §6) | High | Blocked, throttled, failed and empty are typed stops that are always reported and mark the run failed (ADR 0002, ADR 0003); pace at most 1 request per second (ADR 0006); no sign-in, ever; fixtures make the parser's breakage visible in tests | Serhii Lyzun |
+| `CV_Serhii_Lyzun.docx`, the real CV with contact details, is committed locally in `2d63f34` and a GitHub remote is configured; at the time of this design it is not on `origin/main`. The tool also cannot read it (only `.txt` and `.md`, AC-03) | High | Do not push `main` until it is resolved; remove the `.docx` from the unpushed history and keep it out of the repository; create a contact-free `.md` copy in a gitignored place for the tool. Design does not touch git history | Serhii Lyzun |
+| Fit judgments are inconsistent or untrustworthy (a vague CV, a drifting model) | Medium | A rubric with anchor descriptions and one call per vacancy (ADR 0004); spot-check 20 fit pairs and the top 10 of a run in the first two weeks (spec §6, §7) | Serhii Lyzun |
+| Serial judging may exceed 5 min p95 if a judgment takes more than about 6 s (an estimate in ADR 0004, not a measurement) | Medium | The run duration is printed in the coverage report; if it exceeds the budget, run two or three judgments at once (the seam does not change) or change the default model | Serhii Lyzun |
+| A seen memory that is lost, corrupt or pointed at the wrong file makes every vacancy look new again | Medium | The default path resolves from the compiled code, not the current folder; a database that cannot be opened stops the run before any request; a `--db` flag overrides (§7) | Serhii Lyzun |
+| A vacancy's text tries to instruct the judge (spec §6.1) | Medium | Vacancy text sits in a delimited data block, the judge flags instructions, and the judge has no tools and returns only a fit, a reason and a flag, so the worst case is a skewed score (ADR 0004, AC-09) | Serhii Lyzun |
+| The one-time security review of exactly what leaves the machine is not done yet (spec §6.1) | Medium | Do it before the first real run with a full CV, before `sdd:ship`; preflight also warns when the CV looks like it holds contact details (§8) | Serhii Lyzun |
+| `better-sqlite3` is a native library pinned to the 12.x line: 13.0.3's prebuilt binary segfaults on Node 22.9.0; a machine with no matching prebuilt binary needs a build toolchain | Low | Keep `^12.10.1`; re-test before moving to 13 (`CLAUDE.md` Gotchas) | Serhii Lyzun |
+| Lazy hydration makes "not judged (limit)" imprecise (it can include vacancies the salary filter would have dropped), and a shown vacancy whose salary is only on its detail page counts as seen, not as dropped for salary | Low | The report wording says so; recorded in ADR 0001 | Serhii Lyzun |
+| Documents drift from this design: `CLAUDE.md` still says a source "raises" a typed error (ADR 0002), `docs/architecture-map.md` lacks `src/search/` and `src/sources/http.ts`, and spec §6 does not say whether "100% of runs end with a coverage report" includes searches rejected before reading (§10 reads it as runs that passed preflight) | Low | Update the `CLAUDE.md` sentence when implementing; refresh the map with the next `survey`; confirm the reading of §6 at the next spec touch | Serhii Lyzun |
+
+**Accepted debt (acceptable in v1, plan to fix later):**
+- Judgments run one after another; concurrency is a later lever if the budget is threatened.
+- Configuration is flags only, with no config file.
+- The CV contact check is a reminder, not protection; a contact-free copy stays the job seeker's duty.
+- Only one source exists; a second source (company career pages) may need to adjust the shared vacancy shape, as repo ADR 0002 already notes.
 
 ## 12. Glossary
 
