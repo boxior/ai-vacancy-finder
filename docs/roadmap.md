@@ -20,12 +20,12 @@ The owner runs one command with a position, salary range, posted-since date and 
 | # | Step | Source | Size | Status |
 |---|---|---|:---:|---|
 | 1 | Project skeleton: the CLI boots, tests, lint and migrations run | `docs/architecture-map.md` §Module inventory | S | shipped |
-| 2 | First search: position, salary range, posted-since date, location and CV go in; LinkedIn's public listings are read into the shared vacancy shape and printed; a blocked, throttled or empty source raises a typed error | `docs/idea-brief.md` §1 Raw idea · §6 Risks · §8 Open questions | L | idea |
-| 3 | Coverage report that never stays silent: every run ends with how many were read, failed or blocked, and a loud warning when a source returned nothing | `docs/idea-brief.md` §6 Risks · §7 Recommendation | S | idea |
-| 4 | Salary and posted-since filters: a stated salary outside the range is dropped, no stated salary is kept, tagged "salary not listed" and shown below confirmed ones | `docs/idea-brief.md` §1 Raw idea · §6 Risks | S | idea |
-| 5 | Seen-memory: later runs list only new vacancies, with a "show everything" option | `docs/idea-brief.md` §7 Recommendation · §6 Risks | M | idea |
-| 6 | Repost fingerprint: a job reposted with a new date is recognised as already seen | `docs/idea-brief.md` §6 Risks | S | idea |
-| 7 | Fit judge and fit-sorted list: Claude judges each surviving new vacancy against the CV, and the apply links come out sorted by fit with a one-line reason | `docs/idea-brief.md` §2 Problem · §7 Recommendation | M | idea |
+| 2 | First search: position, salary range, posted-since date, location and CV go in; LinkedIn's public listings are read into the shared vacancy shape and printed; a blocked, throttled or empty source raises a typed error | `docs/idea-brief.md` §1 Raw idea · §6 Risks · §8 Open questions | L | spec'd — [spec](features/ai-vacancy-finder/spec.md) |
+| 3 | Coverage report that never stays silent: every run ends with how many were read, failed or blocked, and a loud warning when a source returned nothing | `docs/idea-brief.md` §6 Risks · §7 Recommendation | S | spec'd — [spec](features/ai-vacancy-finder/spec.md) |
+| 4 | Salary and posted-since filters: a stated salary outside the range is dropped, no stated salary is kept, tagged "salary not listed" and shown below confirmed ones | `docs/idea-brief.md` §1 Raw idea · §6 Risks | S | spec'd — [spec](features/ai-vacancy-finder/spec.md) |
+| 5 | Seen-memory: later runs list only new vacancies, with a "show everything" option | `docs/idea-brief.md` §7 Recommendation · §6 Risks | M | spec'd — [spec](features/ai-vacancy-finder/spec.md) |
+| 6 | Repost fingerprint: a job reposted with a new date is recognised as already seen | `docs/idea-brief.md` §6 Risks | S | spec'd — [spec](features/ai-vacancy-finder/spec.md) |
+| 7 | Fit judge and fit-sorted list: Claude judges each surviving new vacancy against the CV, and the apply links come out sorted by fit with a one-line reason | `docs/idea-brief.md` §2 Problem · §7 Recommendation | M | spec'd — [spec](features/ai-vacancy-finder/spec.md) |
 | 8 | Company career pages as a second source → see [Not yet specified](#not-yet-specified) | `docs/idea-brief.md` §7 Recommendation · §8 Open questions | fog | idea |
 
 ## Not yet specified
