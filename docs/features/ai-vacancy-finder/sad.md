@@ -259,7 +259,18 @@ sequenceDiagram
 
 ## 7. Deployment view
 
-<!-- pending -->
+The tool runs as one Node 22 process on the job seeker's own machine, started by hand (`node dist/cli.js` or the `ai-vacancy-finder` bin entry); there is no server, container or schedule. Three things sit outside the code: the CV file, whose path the job seeker passes in; the AI key, read only from `ANTHROPIC_API_KEY`; and the seen database, a single SQLite file that defaults to `data/seen.sqlite` under the project root, resolved from the location of the compiled code and not from the current folder, so running from any folder reads the same memory (the same way the migration runner finds `migrations/`). A `--db <path>` flag overrides it. The file is already covered by the `*.sqlite` pattern in `.gitignore`; if WAL mode is ever turned on, its `-wal` and `-shm` files need patterns too. A missing file means a clean start (created and migrated); a file that exists but cannot be opened or migrated stops the run before any request, because a silent fresh memory would list everything as new.
+
+CI runs on GitHub Actions (Ubuntu, Node 22): `npm ci`, lint, build and test, offline and without a key.
+
+**Monitoring:**
+- The coverage report and the exit status are the monitoring: what was read, dropped, judged and not judged, the source's stop cause, and the run duration.
+- No metrics, alerts or tracing; a one-person on-demand tool gets a spot-check instead (spec §6 and §7: 20 fit pairs and the top 10 of a run, in the first two weeks).
+
+**Scaling thresholds:**
+- Judging is bounded by the judging limit (default 30). If serial judging makes the p95 run exceed 5 minutes, run two or three judgments at once; the seam does not change (`adr/0004-judge-each-vacancy-in-its-own-schema-checked-call.md`).
+- The seen database holds one small row per shown vacancy; it stays comfortable in SQLite for years of personal use, so there is no threshold.
+- A second source adds its own pace counter (ADR 0006); reading sources in parallel is possible but not needed in v1.
 
 ## 8. Crosscutting concepts
 
