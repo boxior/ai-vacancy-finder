@@ -1,0 +1,421 @@
+{
+  "slug": "ai-vacancy-finder",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define the vacancy shape, the search input type, the clock and the repost fingerprint",
+      "layer": "domain",
+      "deps": [],
+      "acs": [
+        "AC-19"
+      ],
+      "dod": "The fingerprint and vacancy-schema unit tests pass (case, spacing, separator collision, empty parts) and the three planned libraries are installed with the build green.",
+      "files_hint": [
+        "package.json",
+        "package-lock.json",
+        "src/domain/vacancy.ts",
+        "src/domain/search-input.ts",
+        "src/domain/clock.ts",
+        "test/domain/vacancy.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T01-vacancy-shape-clock-fingerprint.md"
+    },
+    {
+      "id": "T2",
+      "title": "Implement the date and salary filters and their tags as pure rules",
+      "layer": "domain",
+      "deps": [
+        "T1"
+      ],
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-15",
+        "AC-15b"
+      ],
+      "dod": "Unit tests for the date and salary verdicts pass for overlap, single figure, open bounds, currency/period mismatch, rough and missing dates, and the four tags.",
+      "files_hint": [
+        "src/domain/filters.ts",
+        "test/domain/filters.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T02-filters-date-salary-tags.md"
+    },
+    {
+      "id": "T3",
+      "title": "Define the disposition set, the run result and the accounting check",
+      "layer": "domain",
+      "deps": [
+        "T1"
+      ],
+      "acs": [
+        "AC-10"
+      ],
+      "dod": "Unit tests show every read vacancy is counted in exactly one bucket in the AC-10 order, the buckets add up to the read count, and a mismatch is detected.",
+      "files_hint": [
+        "src/domain/disposition.ts",
+        "test/domain/disposition.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T03-dispositions-and-run-result.md"
+    },
+    {
+      "id": "T4",
+      "title": "Define the three seam interfaces with their typed failures, the test fakes, and fix the fail-loudly wording",
+      "layer": "domain",
+      "deps": [
+        "T1",
+        "T3"
+      ],
+      "acs": [
+        "AC-07b",
+        "AC-11"
+      ],
+      "dod": "The three seam interfaces and the test fakes compile and a fake-clock/fake-judge test passes; the CLAUDE.md fail-loudly sentence matches ADR 0002.",
+      "files_hint": [
+        "src/sources/source.ts",
+        "src/matching/judge.ts",
+        "src/store/seen-store.ts",
+        "test/support/fake-clock.ts",
+        "test/support/fake-source.ts",
+        "test/support/fake-judge.ts",
+        "test/support/fake-seen-store.ts",
+        "test/support/builders.ts",
+        "CLAUDE.md"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T04-seam-interfaces-and-fakes.md"
+    },
+    {
+      "id": "T5",
+      "title": "Promote the staged shown_vacancy migration into the live migrations",
+      "layer": "migration",
+      "deps": [],
+      "acs": [
+        "AC-16"
+      ],
+      "dod": "Migration 0002 applies and reverts cleanly (user_version 1→2→1), the table constraints reject empty values and duplicate keys, and the updated migrate tests pass.",
+      "files_hint": [
+        "docs/features/ai-vacancy-finder/migrations/01_create_shown_vacancy.up.sql",
+        "docs/features/ai-vacancy-finder/migrations/01_create_shown_vacancy.down.sql",
+        "test/migrate.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T05-migration-shown-vacancy.md"
+    },
+    {
+      "id": "T6",
+      "title": "Implement the SQLite seen-store and the opener that creates or refuses the database",
+      "layer": "infra",
+      "deps": [
+        "T1",
+        "T4",
+        "T5"
+      ],
+      "acs": [
+        "AC-16",
+        "AC-19",
+        "AC-22"
+      ],
+      "dod": "Seen-store tests pass against real SQLite: identity and fingerprint lookups, idempotent one-transaction marking, and an unusable or missing-folder database is reported instead of silently recreated.",
+      "files_hint": [
+        "src/store/sqlite-seen-store.ts",
+        "src/store/open-store.ts",
+        "test/store/sqlite-seen-store.test.ts",
+        "test/support/open-memory-store.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T06-sqlite-seen-store.md"
+    },
+    {
+      "id": "T7",
+      "title": "Build the shared polite HTTP client: pace, back-off and typed refusals",
+      "layer": "infra",
+      "deps": [
+        "T1",
+        "T4"
+      ],
+      "acs": [
+        "AC-23"
+      ],
+      "dod": "Fake-clock tests prove at most one request per second per client, at most 3 retries within 60 s of back-off, a throttled stop afterwards, and no fetch after a stop.",
+      "files_hint": [
+        "src/sources/http.ts",
+        "test/sources/http.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T07-polite-http-client.md"
+    },
+    {
+      "id": "T8",
+      "title": "Implement the Claude fit judge: rubric prompt, schema-checked answer, failure classes",
+      "layer": "infra",
+      "deps": [
+        "T1",
+        "T4"
+      ],
+      "acs": [
+        "AC-07",
+        "AC-07b",
+        "AC-09"
+      ],
+      "dod": "Tests with a fake SDK client cover a valid answer, the instruction flag, an unusable answer and each service-error mapping, with one call per vacancy and no CV or key in any failure detail.",
+      "files_hint": [
+        "src/matching/claude-judge.ts",
+        "src/matching/prompt.ts",
+        "test/matching/claude-judge.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T08-claude-fit-judge.md"
+    },
+    {
+      "id": "T9",
+      "title": "Save real public LinkedIn pages as fixtures and record what they show",
+      "layer": "tests",
+      "deps": [],
+      "acs": [
+        "AC-04",
+        "AC-08"
+      ],
+      "dod": "Real public LinkedIn pages are saved in test/fixtures/linkedin/ with a README answering each sub-question of spec §8 open question 1, and the fixture inventory test passes.",
+      "files_hint": [
+        "test/fixtures/linkedin/",
+        "test/fixtures.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T09-capture-linkedin-fixtures.md"
+    },
+    {
+      "id": "T10",
+      "title": "Parse LinkedIn results pages into cards and list them with typed stops",
+      "layer": "infra",
+      "deps": [
+        "T1",
+        "T4",
+        "T7",
+        "T9"
+      ],
+      "acs": [
+        "AC-04",
+        "AC-12",
+        "AC-15"
+      ],
+      "dod": "Tests over the saved LinkedIn fixtures pass for card parsing, rough-age ranges, the expected count and the blocked, failed and empty stops, with no sign-in path.",
+      "files_hint": [
+        "src/sources/linkedin/list.ts",
+        "test/sources/linkedin-list.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T10-linkedin-list-parser.md"
+    },
+    {
+      "id": "T11",
+      "title": "Parse LinkedIn detail pages, assemble the LinkedIn source and register it",
+      "layer": "infra",
+      "deps": [
+        "T4",
+        "T7",
+        "T9",
+        "T10"
+      ],
+      "acs": [
+        "AC-08",
+        "AC-13"
+      ],
+      "dod": "Tests over the saved detail fixtures pass for description, pay, the cut-off sign and the blocked and unreadable stops, and the LinkedIn source is registered behind the VacancySource seam.",
+      "files_hint": [
+        "src/sources/linkedin/detail.ts",
+        "src/sources/linkedin/index.ts",
+        "src/sources/index.ts",
+        "test/sources/linkedin-detail.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T11-linkedin-hydrate-and-source.md"
+    },
+    {
+      "id": "T12",
+      "title": "Classify cards: drop, skip seen and reposts, and order the candidates",
+      "layer": "app",
+      "deps": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "acs": [
+        "AC-15",
+        "AC-16",
+        "AC-17",
+        "AC-18",
+        "AC-19",
+        "AC-20"
+      ],
+      "dod": "Tests pass for the AC-10 check order, seen versus repost, same-search siblings, show-everything marks and both candidate orderings.",
+      "files_hint": [
+        "src/search/classify.ts",
+        "test/search/classify.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T12-classify-cards.md"
+    },
+    {
+      "id": "T13",
+      "title": "Implement runSearch: list, classify, hydrate and judge under the limit, present, mark seen",
+      "layer": "app",
+      "deps": [
+        "T2",
+        "T3",
+        "T4",
+        "T12"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-17",
+        "AC-21",
+        "AC-22"
+      ],
+      "dod": "Offline runSearch tests pass for the happy path: at most the judging limit of judge calls, leftovers reported as limit and not marked seen, and vacancies marked seen only after the result is presented.",
+      "files_hint": [
+        "src/search/run-search.ts",
+        "test/search/run-search.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T13-run-search-main-flow.md"
+    },
+    {
+      "id": "T14",
+      "title": "Handle source stops and partial reads in runSearch",
+      "layer": "app",
+      "deps": [
+        "T13"
+      ],
+      "acs": [
+        "AC-04",
+        "AC-11",
+        "AC-12",
+        "AC-23"
+      ],
+      "dod": "Tests through runSearch cover blocked, failed and empty at listing, throttled mid-hydration and the partial-read boundary; every stop kind reaches the result and fails the run, and a partial read does not.",
+      "files_hint": [
+        "src/search/run-search.ts",
+        "test/search/run-search-stops.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T14-run-search-source-stops.md"
+    },
+    {
+      "id": "T15",
+      "title": "Handle judge failures, unexpected errors, an unusable memory and a failed print in runSearch",
+      "layer": "app",
+      "deps": [
+        "T14"
+      ],
+      "acs": [
+        "AC-07",
+        "AC-07b"
+      ],
+      "dod": "Tests through runSearch cover an unusable answer, each service-level judge failure, an unexpected exception, an unusable store, a failing presenter and the accounting check, with no CV or key in any failure message.",
+      "files_hint": [
+        "src/search/run-search.ts",
+        "test/search/run-search-failures.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T15-run-search-judge-failures-and-unexpected.md"
+    },
+    {
+      "id": "T16",
+      "title": "Render the fit-sorted vacancy list with its tags and marks",
+      "layer": "app",
+      "deps": [
+        "T1",
+        "T3"
+      ],
+      "acs": [
+        "AC-06",
+        "AC-08",
+        "AC-09"
+      ],
+      "dod": "Tests pass for two-group fit ordering with stable ties, all tags and marks shown, the partial-description and instruction suffixes, and a low-fit vacancy still listed.",
+      "files_hint": [
+        "src/report/list.ts",
+        "test/report/list.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T16-render-vacancy-list.md"
+    },
+    {
+      "id": "T17",
+      "title": "Render the coverage report, the loud warnings and the whole result document",
+      "layer": "app",
+      "deps": [
+        "T3",
+        "T16"
+      ],
+      "acs": [
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-16"
+      ],
+      "dod": "Golden tests reproduce the CLI contract's example outputs; every failure mode ends with a coverage report whose buckets add up to Read and a RUN FAILED line, and a partial read warns without failing.",
+      "files_hint": [
+        "src/report/coverage.ts",
+        "src/report/warnings.ts",
+        "src/report/render.ts",
+        "test/report/render.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T17-render-coverage-report-and-document.md"
+    },
+    {
+      "id": "T18",
+      "title": "Implement preflight: argument parsing, input validation, CV, key and the contact notice",
+      "layer": "ports",
+      "deps": [
+        "T1"
+      ],
+      "acs": [
+        "AC-02",
+        "AC-03",
+        "AC-05"
+      ],
+      "dod": "Tests cover every usage-error code, several problems reported together, the CV format and emptiness rules, the missing key, and a contact notice that never prints the matched text.",
+      "files_hint": [
+        "src/preflight.ts",
+        "src/domain/search-input.ts",
+        "test/preflight.test.ts",
+        "test/domain/search-input.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T18-preflight-args-input-cv-key.md"
+    },
+    {
+      "id": "T19",
+      "title": "Wire the adapters in src/cli.ts and set the output streams and exit status",
+      "layer": "wiring",
+      "deps": [
+        "T6",
+        "T8",
+        "T11",
+        "T15",
+        "T17",
+        "T18"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-11"
+      ],
+      "dod": "main() tests pass for exit statuses 0, 1 and 2 and stdout/stderr separation, the smoke tests still pass against dist/cli.js, and the concrete adapters are wired only in src/cli.ts.",
+      "files_hint": [
+        "src/cli.ts",
+        "test/cli.test.ts",
+        "test/smoke.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T19-wire-cli.md"
+    },
+    {
+      "id": "T20",
+      "title": "Add the cross-cutting offline acceptance tests for the quality scenarios",
+      "layer": "tests",
+      "deps": [
+        "T19"
+      ],
+      "acs": [
+        "AC-10",
+        "AC-16"
+      ],
+      "dod": "Offline end-to-end tests pass for every failure mode ending in a summing coverage report, zero repeat listings across runs, judge calls within the limit, and no CV or key text in any output.",
+      "files_hint": [
+        "test/e2e/failure-modes.test.ts",
+        "test/e2e/seen-memory.test.ts",
+        "test/e2e/limit.test.ts",
+        "test/e2e/confidentiality.test.ts",
+        "test/e2e/fixtures-run.test.ts"
+      ],
+      "file": "docs/features/ai-vacancy-finder/tasks/T20-acceptance-tests-offline.md"
+    }
+  ]
+}
