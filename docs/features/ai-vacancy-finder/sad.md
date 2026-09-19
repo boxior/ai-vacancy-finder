@@ -111,7 +111,70 @@ A vacancy counts as seen only once it has been shown, so the seen memory never h
 
 ## 5. Building block view
 
-<!-- pending -->
+One Node process built from plain modules behind three small seams (vacancy source, fit judge, seen-store); the concrete adapters are wired once in `src/cli.ts` (repo ADR `docs/adr/0002-organize-code-as-one-folder-per-vacancy-source.md`). There is no layering ceremony beyond that. Two additions to the map's module inventory: `src/search/` holds the pipeline of §4 so that `cli.ts` stays a thin composition root and every acceptance criterion can be tested offline by passing fakes in (`adr/0005-run-the-search-pipeline-in-its-own-module-with-adapters-passed-in.md`), and `src/sources/http.ts` is the one polite HTTP client every source uses, with an injected clock so pace and back-off are testable (`adr/0006-share-one-polite-http-client-across-sources-with-an-injected-clock.md`).
+
+**Internal decomposition (file names are indicative; `tasks` fixes them):**
+
+```
+src/
+├── cli.ts                   composition root: parse args, read the CV, wire adapters, call runSearch, print, exit status
+├── domain/                  zod schemas and pure rules, no I/O
+│   ├── vacancy.ts             Vacancy (filled progressively), PostedDate (exact | range | unknown), Salary
+│   ├── search-input.ts        SearchInput and its validation messages
+│   ├── filters.ts             date and salary rules: overlap, comparability, tags
+│   ├── disposition.ts         the closed set of dispositions and the run result
+│   └── clock.ts               Clock interface (now, sleep)
+├── search/
+│   └── run-search.ts          the pipeline of §4; depends only on domain and the three seam interfaces
+├── sources/
+│   ├── source.ts              VacancySource interface (list, hydrate) and the typed stop
+│   ├── index.ts               registry of sources
+│   ├── http.ts                polite HTTP client: pace, back-off, refusals mapped to stop kinds
+│   └── linkedin/              list and detail parsers, sign-in page detection
+├── matching/
+│   ├── judge.ts               FitJudge interface and its failure classes
+│   └── claude-judge.ts        prompt, Anthropic client, schema-checked answer
+├── store/
+│   ├── seen-store.ts          SeenStore interface
+│   ├── sqlite-seen-store.ts   seen memory and repost fingerprint over better-sqlite3
+│   └── migrate.ts             migration runner (exists)
+└── report/                    pure rendering: list, warnings, coverage report
+```
+
+**Shape of the shared vacancy (`adr/0007-model-a-posted-date-as-exact-range-or-unknown.md`).** One `Vacancy` type serves both a card and a hydrated vacancy; its description is empty until it is hydrated. A posted date is an exact date, a range (earliest and latest possible) or unknown. A vacancy is dropped for date only when even its latest possible date is before the posted-since date; a range that straddles that date is kept and tagged "date approximate"; an unknown date is tagged "date not listed"; ordering uses the middle of a range. A salary is a minimum and maximum with a currency and a period.
+
+**C4 Container (L2):**
+
+```mermaid
+C4Container
+    title ai-vacancy-finder - Containers
+
+    Person(seeker, "Job seeker", "Runs a search and reads the result")
+    System_Ext(cv, "CV file", "The job seeker's own CV as a local .txt or .md file")
+    System_Ext(linkedin, "LinkedIn public pages", "Public vacancy listings and detail pages")
+    System_Ext(claude, "Claude API", "Judges each vacancy against the CV")
+
+    Container_Boundary(app, "ai-vacancy-finder - one Node 22 process") {
+        Container(cli, "CLI", "TypeScript", "Parses inputs, reads the CV, wires the adapters, prints the result, sets the exit status")
+        Container(search, "Search", "TypeScript", "Runs the pipeline: preflight, list, classify, order, hydrate and judge, close the accounts")
+        Container(sources, "Sources", "TypeScript, cheerio", "One folder per site with list and hydrate, plus the shared polite HTTP client; LinkedIn first")
+        Container(matching, "Matching", "TypeScript, Anthropic SDK", "Fit judge: prompt, schema-checked answer, failure classes")
+        Container(store, "Store", "TypeScript, better-sqlite3", "Seen memory, repost fingerprint and the migration runner")
+        Container(report, "Report", "TypeScript", "Renders the fit-sorted list, the warnings and the coverage report from the run result")
+        ContainerDb(db, "Seen database", "SQLite file", "Vacancies already shown: identity and repost fingerprint")
+    }
+
+    Rel(seeker, cli, "Runs a search, reads the output", "Terminal")
+    Rel(cli, cv, "Reads", "Local file")
+    Rel(cli, search, "Runs the search with the adapters it wired", "Function call")
+    Rel(cli, report, "Renders the run result", "Function call")
+    Rel(search, sources, "Lists cards, hydrates vacancies", "Source interface")
+    Rel(search, matching, "Judges one vacancy at a time", "Fit judge interface")
+    Rel(search, store, "Checks seen and reposts, marks shown", "Seen-store interface")
+    Rel(sources, linkedin, "Reads public pages, at most 1 request per second", "HTTPS")
+    Rel(matching, claude, "Sends the CV and one vacancy text", "HTTPS")
+    Rel(store, db, "Reads and writes", "better-sqlite3")
+```
 
 ## 6. Runtime view
 
