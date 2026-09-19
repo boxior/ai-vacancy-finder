@@ -178,7 +178,84 @@ C4Container
 
 ## 6. Runtime view
 
-<!-- pending -->
+Participants are the containers of §5 plus the two external systems; messages are semantic, and endpoint-level detail arrives at the `api` stage. The pipeline hands the finished result to a presenter that the CLI supplies (which uses the Report), and marks vacancies seen only after the presenter returns; if printing fails, nothing is marked and the vacancies come back as new. Once a source has stopped, the shared HTTP client refuses further requests to it without waiting, so vacancies not yet hydrated are reported as not judged with the source's cause. A stop during the listing phase therefore judges nothing from that source and the run is still reported as failed with the coverage report. The `sequences` stage covers every other acceptance criterion (an AI service failure, a blocked or empty source, a partial read, "show everything", invalid input).
+
+**Critical flow 1: a successful search**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant LinkedIn
+    participant Matching
+    participant Claude
+    participant Store
+    participant Report
+
+    Seeker->>CLI: runs a search with position, salary range, posted-since date and location
+    CLI->>CLI: validates the inputs, reads the CV, checks the AI key
+    CLI->>Search: runs the search with the wired adapters
+    Search->>Store: opens the seen memory
+    Search->>Sources: lists cards for the search
+    Sources->>LinkedIn: reads result pages, at most 1 request per second
+    LinkedIn-->>Sources: cards
+    Sources-->>Search: cards and the expected count if the site states one
+    Search->>Store: asks which cards are already shown or reposts
+    Store-->>Search: seen and repost matches
+    Note over Search: drops by date, skips seen and reposts, orders newest first
+    loop until the judging limit is filled or the candidates run out
+        Search->>Sources: hydrates the next candidate
+        Sources->>LinkedIn: reads the detail page
+        LinkedIn-->>Sources: full vacancy
+        Sources-->>Search: vacancy with its description
+        Note over Search: drops by salary when the stated pay is out of range
+        Search->>Matching: judges the vacancy against the CV
+        Matching->>Claude: sends the CV and the vacancy text
+        Claude-->>Matching: fit, reason and instruction flag
+        Matching-->>Search: judgment
+    end
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders the list, the warnings and the coverage report
+    Report-->>CLI: text
+    CLI-->>Seeker: prints the result
+    Search->>Store: marks the shown vacancies as seen
+    Search-->>CLI: final run status
+    CLI-->>Seeker: exits with the run status
+```
+
+**Critical flow 2: a source starts refusing in the middle of a run**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant LinkedIn
+    participant Store
+    participant Report
+
+    Note over Search: cards are already listed and ordered, and the first vacancies are already judged
+    Search->>Sources: hydrates the next candidate
+    Sources->>LinkedIn: reads the detail page
+    LinkedIn-->>Sources: refuses and asks to slow down
+    loop up to 3 retries, at most 1 minute of total waiting
+        Sources->>Sources: waits longer, then retries
+        Sources->>LinkedIn: reads the detail page again
+        LinkedIn-->>Sources: refuses again
+    end
+    Sources-->>Search: typed failure throttled, the source is now stopped
+    Note over Search: this and every unreached candidate become not judged with cause throttled
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders the list of what was judged, the loud warning and the coverage report
+    Report-->>CLI: text ending with the RUN FAILED line
+    CLI-->>Seeker: prints the result
+    Search->>Store: marks the vacancies that were shown as seen
+    Search-->>CLI: final run status failed
+    CLI-->>Seeker: exits with a non-zero status
+```
 
 ## 7. Deployment view
 
