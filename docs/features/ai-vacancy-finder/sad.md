@@ -274,7 +274,22 @@ CI runs on GitHub Actions (Ubuntu, Node 22): `npm ci`, lint, build and test, off
 
 ## 8. Crosscutting concepts
 
-<!-- pending -->
+| Concept | Convention | Where defined |
+|---|---|---|
+| Output and exit status | The whole result (list, loud warnings, coverage report) is one document on stdout, so a warning above the report survives redirection to a file. Invalid input, an unreadable CV or a missing key writes a plain message to stderr, exits 2 and reads nothing. A failed run (a source blocked, throttled, failed or empty; an AI service failure; an accounting mismatch; an unusable database) puts a `RUN FAILED` line in the coverage report and exits 1. A partial-read warning alone, or "no new vacancies", exits 0. | here; command contract at the `api` stage |
+| Error handling | Expected conditions are typed values: source stops (ADR 0002) and judge failure classes (ADR 0004). `zod` validates every boundary: the search input, the CV, parsed pages and the judge's answer. One catch in the pipeline turns an unexpected exception into a failed run that is still reported. Nothing is swallowed. `CLAUDE.md` says a source "raises" a typed error; ADR 0002 keeps its spirit and needs a one-sentence wording update when implemented. | ADR 0002, ADR 0004, `CLAUDE.md` Rules |
+| Secrets and authorisation | The AI key comes only from `ANTHROPIC_API_KEY` and is never printed or written to a file. No account of the job seeker is ever signed in to a source; a sign-in page means "blocked". | spec §6.1, `CLAUDE.md` Rules |
+| Privacy of the CV | The CV text is sent as it is to the Claude API with each judgment and is never logged, printed or stored; the seen memory holds only identity and repost fingerprint. Preflight looks for email and phone patterns and, if found, prints one warning that contact details in the CV go to the AI service with every judgment, then continues. It never prints the matched text. This is a reminder, not protection: names, addresses and handles are not detected, so a contact-free copy remains the job seeker's duty. | spec §6.1, here |
+| Untrusted vacancy text | Vacancy text is data. It goes into a delimited block of the prompt, the judge is told to treat it as data and reports whether it contained instructions, and nothing outside the judge acts on it. | ADR 0004, AC-09 |
+| ID strategy | A vacancy is the source name plus the site's own job number. The repost fingerprint is company plus title, lowercased with repeated spaces collapsed and nothing else normalised. Two vacancies read in the same search are never reposts of each other. | repo ADR 0003, AC-19 |
+| Time and pace | An injected `Clock` (now, sleep) drives request pace, back-off, the run duration in the coverage report and "today" for the date rules; tests use a fake clock. | ADR 0006 |
+| Salary comparison | An overlap with the salary range, even partial, is kept; a single figure is a range of zero width, "from X" is X and up, "up to X" is 0 to X. A stated pay is compared only when its currency and period match the range's; otherwise it is kept and tagged "pay not comparable". No conversion. | spec §1 decision override, AC-13, §2 |
+| Configuration | Flags only, no config file in v1: position, salary range, posted-since date, location or remote-only, CV path, judging limit, model, database path, show everything. Names and defaults are fixed by the `api` stage. | here |
+| Testing seams | Sources are tested against saved real pages, the judge against a fake, the store against a real SQLite database (in memory or a temporary file), time against a fake clock, and the whole run through `runSearch`; no test touches the network. | `CLAUDE.md` Rules, ADR 0005 |
+| Logging | No logging framework; the report is the output. | — |
+| Internationalisation | N/A, English only. | — |
+| Observability | The coverage report and the exit status (§7). | §7 |
+| Events | N/A, no events, queues or background work. | — |
 
 ## 9. Architecture decisions
 
