@@ -1,0 +1,1 @@
+-- Baseline: intentionally empty. Marks the database as managed by the in-repo runner (user_version 1).

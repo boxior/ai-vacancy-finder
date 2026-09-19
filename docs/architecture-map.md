@@ -99,6 +99,7 @@ C4Container
 - Reading LinkedIn's public pages is against its terms and is likely to break or be blocked; the owner chose this knowingly (`docs/idea-brief.md` §6). Source code must fail loudly, never quietly.
 - Public pages often show no salary, so the salary filter is weaker than it looks (`docs/idea-brief.md` §6).
 - better-sqlite3 is a native library; an install on a machine with no matching prebuilt binary needs a build toolchain (`docs/adr/0003-keep-seen-memory-in-a-local-sqlite-file.md`).
+- better-sqlite3 is pinned to the 12.x line (`^12.10.1`): the 13.0.3 prebuilt binary segfaults when opening a database on Node 22.9.0 (found while scaffolding). Re-test before moving to 13.
 - Each fit judgment calls a paid AI service, so how many vacancies are judged per run is an open cost question (`docs/idea-brief.md` §8).
 - CV format (plain text, Markdown, PDF) is not decided (`docs/idea-brief.md` §8); the first skeleton assumes a text or Markdown file.
 

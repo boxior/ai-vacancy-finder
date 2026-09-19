@@ -1,0 +1,1 @@
+-- Reverts the baseline: nothing to undo (user_version returns to 0).
