@@ -258,6 +258,348 @@ sequenceDiagram
     CLI-->>Seeker: exits with a non-zero status
 ```
 
+**Critical flow 3: preflight rejects the run before anything is read**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Store
+    participant Report
+
+    Note over Seeker,CLI: Precondition: the job seeker starts a search and nothing has been read yet
+    Seeker->>CLI: runs a search
+    alt an input is invalid (position missing, salary range inverted, posted-since date in the future, judging limit zero or less)
+        CLI-->>Seeker: says which input is invalid and why, as a plain message on the error stream
+    else the CV file is missing or empty
+        CLI-->>Seeker: names the CV problem
+    else the CV is in an unsupported format
+        CLI-->>Seeker: names the problem and says that .txt and .md files are accepted
+    else the AI key is not set in the environment
+        CLI-->>Seeker: says the key is missing and how to provide it
+    else the inputs, the CV and the key are fine
+        CLI-->>Seeker: warns once if the CV looks like it holds an email or a phone number, without printing it
+        CLI->>Search: runs the search with the wired adapters
+        Search->>Store: opens the seen memory
+        alt the database file does not exist
+            Store-->>Search: creates and migrates a fresh memory
+            Note over Search,Store: persists the seen-memory schema on a clean start (informs data-model)
+            Note over Search: the run continues as in flow 1
+        else the file exists but cannot be opened or migrated
+            Store-->>Search: typed failure, the seen memory is unusable
+            Note over Search: nothing is read, this is a failed run with an empty accounting
+            Search->>CLI: hands over the run result to print
+            CLI->>Report: renders the loud warning and the coverage report
+            Report-->>CLI: text ending with the RUN FAILED line
+            CLI-->>Seeker: prints the result
+            CLI-->>Seeker: exits with the failed-run status
+        end
+    end
+    Note over Seeker,CLI: Postcondition: a rejected run has made no request to a source or to the Claude API and marked nothing seen, and exits with the usage-error status unless it is the unusable-database failed run
+```
+
+**Critical flow 4: the source stops or returns too little while listing**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant LinkedIn
+    participant Store
+    participant Report
+
+    Note over Seeker,Search: Precondition: preflight passed and the search is listing cards
+    Search->>Sources: lists cards for the search
+    Sources->>LinkedIn: reads result pages, at most 1 request per second
+    alt LinkedIn shows a sign-in page instead of public results
+        LinkedIn-->>Sources: sign-in page
+        Note over Sources: never signs in with any account
+        Sources-->>Search: typed stop blocked, with any cards read before it
+    else LinkedIn fails or its pages cannot be read
+        LinkedIn-->>Sources: error or unreadable page
+        Sources-->>Search: typed stop failed, with any cards read before it
+    else LinkedIn returns no vacancies at all
+        LinkedIn-->>Sources: no cards
+        Sources-->>Search: typed stop empty
+    else fewer than half of the stated expected count is read
+        LinkedIn-->>Sources: cards
+        Sources-->>Search: cards and the expected count
+        Note over Search: the run continues as in flow 1 with the cards it has and records a partial read
+    end
+    alt the source stopped (blocked, failed or empty)
+        Note over Search: cards already read are counted and each becomes not judged with the stop cause, nothing more is hydrated or judged from this source
+        Search->>CLI: hands over the run result to print
+        CLI->>Report: renders the loud warning naming the source and the cause, above the coverage report
+        Report-->>CLI: text ending with the RUN FAILED line
+        CLI-->>Seeker: prints the result and never a bare empty list
+        Note over Search,Store: nothing was shown, so nothing is marked seen
+        Search-->>CLI: final run status failed
+        CLI-->>Seeker: exits with a non-zero status
+    else the read was only partial
+        Search->>CLI: hands over the run result to print
+        CLI->>Report: renders the list, the partial-read warning with read out of expected, and the coverage report
+        Report-->>CLI: text without a RUN FAILED line
+        CLI-->>Seeker: prints the result
+        Search->>Store: marks the shown vacancies as seen
+        Search-->>CLI: final run status succeeded
+        CLI-->>Seeker: exits with the success status
+    end
+    Note over Seeker,Search: Postcondition: the coverage report names the source and the cause or the read out of expected, and only a stop marks the run as failed
+```
+
+**Critical flow 5: judging one vacancy, with a cut-off description, an injection attempt or an unusable answer**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant LinkedIn
+    participant Matching
+    participant Claude
+    participant Store
+    participant Report
+
+    Note over Search: Precondition: the candidate list is ordered and the judging limit is not yet filled
+    loop for each candidate until the limit is filled or the candidates run out
+        Search->>Sources: hydrates the next candidate
+        Sources->>LinkedIn: reads the detail page
+        LinkedIn-->>Sources: full vacancy page
+        Note over Sources: sets the partial-description flag only when the page itself shows a sign such as a show more marker, a cut-off or a sign-in gate over the text, never from the length of the text
+        Sources-->>Search: vacancy with its description and the flag
+        Search->>Matching: judges the vacancy against the CV
+        Matching->>Claude: sends the CV and the vacancy text inside a delimited block marked as data
+        Claude-->>Matching: answer
+        alt the answer is valid and reports no instructions
+            Matching-->>Search: judgment with fit and reason
+        else the answer is valid and reports that the vacancy text contained instructions
+            Matching-->>Search: judgment with fit, reason and the instruction flag
+            Note over Search: the fit rests on the match with the CV alone and the vacancy is marked as containing instructions
+        else the answer is unusable or fails the schema check
+            Matching-->>Search: typed failure unusable answer for this vacancy
+            Note over Search: this vacancy becomes not judged with that reason, is not a recommendation and is not marked seen, and the loop goes on with the next candidate
+        end
+    end
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders the list and the coverage report
+    Note over Report: a vacancy with the partial flag says its fit is based on a partial description, one with the instruction flag says so in its reason line, and a not judged vacancy appears only in the coverage report with its reason
+    Report-->>CLI: text
+    CLI-->>Seeker: prints the result
+    Search->>Store: marks only the shown vacancies as seen
+    Note over Search,Store: persists the shown vacancies, so a not judged vacancy comes back as new next time
+    Search-->>CLI: final run status
+    CLI-->>Seeker: exits with the run status
+    Note over Seeker,Search: Postcondition: one bad answer never stops the other judgments and never presents a fit as more certain than the text it rests on
+```
+
+**Critical flow 6: the AI service stops judging in the middle of a run**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Matching
+    participant Claude
+    participant Store
+    participant Report
+
+    Note over Search: Precondition: some vacancies are already judged and the next candidate is being judged
+    Search->>Matching: judges the next vacancy against the CV
+    Matching->>Claude: sends the CV and the vacancy text
+    alt the AI service rejects the key
+        Claude-->>Matching: rejects the key
+    else the AI service has no allowance left
+        Claude-->>Matching: refuses because the allowance is used up
+    else the AI service cannot be reached
+        Claude-->>Matching: no answer after the client's own retries
+    end
+    Matching-->>Search: typed failure service stopped, with its cause
+    Note over Search: judging stops at the first such failure and this vacancy and every unreached candidate become not judged with that cause
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders the list of what was judged before the failure, the loud warning naming the cause, and the coverage report
+    Report-->>CLI: text ending with the RUN FAILED line
+    CLI-->>Seeker: prints the result
+    Search->>Store: marks the vacancies that were shown as seen
+    Note over Search,Store: persists only shown vacancies, so the not judged ones come back as new next time
+    Search-->>CLI: final run status failed
+    CLI-->>Seeker: exits with a non-zero status
+    Note over Seeker,Search: Postcondition: no vacancy after the failure was judged or marked seen, and the failure is never silent
+```
+
+**Critical flow 7: a repeat search lists only new vacancies and skips reposts**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant Store
+    participant Report
+
+    Note over Seeker,Store: Precondition: an earlier search showed some vacancies, so the seen memory holds their identity and repost fingerprint
+    Seeker->>CLI: runs a search without show everything
+    CLI->>Search: runs the search with the wired adapters
+    Search->>Sources: lists cards for the search
+    Sources-->>Search: cards
+    Search->>Store: asks which cards are already shown or reposts
+    Store-->>Search: shown identities and shown company and title fingerprints
+    loop for each card
+        alt the source name and job number match a shown vacancy
+            Note over Search: skipped as already seen
+        else the company and title match a shown vacancy under a new job number or date
+            Note over Search: skipped as a repost and counted as a repost
+        else neither matches
+            Note over Search: stays a candidate, including one that was dropped, not judged or lost to a failure in an earlier search
+        end
+    end
+    Note over Search: two cards read in this same search are never reposts of each other
+    Note over Search,Sources: the remaining candidates are hydrated and judged as in flow 1
+    alt at least one new vacancy is shown
+        Search->>CLI: hands over the run result to print
+        CLI->>Report: renders the new vacancies and the coverage report with the counts of seen and repost skips
+        Report-->>CLI: text
+        CLI-->>Seeker: prints the result
+        Search->>Store: marks the shown vacancies as seen
+        Note over Search,Store: persists shown vacancy identity and repost fingerprint (informs data-model indexes)
+    else nothing is new because all were seen, reposts or dropped by the filters
+        Search->>CLI: hands over the run result to print
+        CLI->>Report: renders the no new vacancies message with the read and skipped counts, and the coverage report
+        Report-->>CLI: text without a RUN FAILED line
+        CLI-->>Seeker: prints the result
+        Note over Search,Store: nothing was shown, so nothing is marked seen
+    end
+    Search-->>CLI: final run status succeeded
+    CLI-->>Seeker: exits with the success status
+    Note over Seeker,Store: Postcondition: no vacancy is listed twice across consecutive same-detail searches, and a vacancy dropped only by a filter appears as new once the filter is widened
+```
+
+**Critical flow 8: show everything lists what was shown before too**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant Matching
+    participant Store
+    participant Report
+
+    Note over Seeker,Store: Precondition: earlier searches showed some vacancies and some later ones were skipped as reposts
+    Seeker->>CLI: runs a search with show everything on
+    CLI->>Search: runs the search with the wired adapters
+    Search->>Sources: lists cards for the search
+    Sources-->>Search: cards
+    Search->>Store: asks which cards are already shown or reposts
+    Store-->>Search: shown identities and shown company and title fingerprints
+    Note over Search: seen vacancies and reposts are not skipped, they stay candidates marked seen before or repost
+    Note over Search: orders new candidates first and then those shown before, newest first within each group
+    loop until the judging limit is filled or the candidates run out
+        Search->>Sources: hydrates the next candidate
+        Sources-->>Search: vacancy with its description
+        Search->>Matching: judges the vacancy against the CV again, whether or not it was shown before
+        Matching-->>Search: judgment
+    end
+    Note over Search: candidates left over the limit become not judged because of the limit
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders every judged vacancy with seen before or repost marks where they apply, and the coverage report with the count of reposts
+    Report-->>CLI: text
+    CLI-->>Seeker: prints the result
+    Search->>Store: marks the shown vacancies as seen
+    Note over Search,Store: persists shown vacancies, those already stored stay as they are (informs data-model, the write must be idempotent)
+    Search-->>CLI: final run status
+    CLI-->>Seeker: exits with the run status
+    Note over Seeker,Store: Postcondition: a wrongly skipped opening can always be found by running with show everything, because a search without it states how many reposts it skipped
+```
+
+**Critical flow 9: the judging limit is hit and the leftovers are judged next time**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Sources
+    participant Matching
+    participant Store
+    participant Report
+
+    Note over Seeker,Search: Precondition: more new vacancies pass the filters than the judging limit allows, whether the default or one set for this search
+    Seeker->>CLI: runs a search
+    CLI->>Search: runs the search with the wired adapters and the judging limit
+    Search->>Sources: lists cards for the search
+    Sources-->>Search: cards
+    Note over Search: orders the candidates newest first by the best estimate of the posted date, vacancies with no date last
+    loop until the judging limit is filled
+        Search->>Sources: hydrates the next candidate
+        Sources-->>Search: vacancy with its description
+        Search->>Matching: judges the vacancy against the CV
+        Matching-->>Search: judgment
+    end
+    Note over Search: the candidates over the limit are not hydrated or judged and become not judged because of the limit
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders the judged vacancies and the coverage report with the number of judgments made and the number not judged because of the limit
+    Report-->>CLI: text
+    CLI-->>Seeker: prints the result
+    Search->>Store: marks only the shown vacancies as seen
+    Note over Search,Store: persists shown vacancies only, so the vacancies over the limit stay unknown to the seen memory
+    Search-->>CLI: final run status succeeded
+    CLI-->>Seeker: exits with the success status
+    Note over Seeker,Store: A later search with the same details
+    Seeker->>CLI: runs the search again
+    CLI->>Search: runs the search with the wired adapters
+    Search->>Store: asks which cards are already shown or reposts
+    Store-->>Search: matches only for what was shown before
+    Note over Search: the vacancies left over last time are treated as new and are judged, newest first, up to the limit again
+    Note over Seeker,Store: Postcondition: at most the judging limit of judgments per search, and no vacancy is lost because of the limit
+```
+
+**Cross-cutting: an unexpected exception or a failed print is still reported**
+
+```mermaid
+sequenceDiagram
+    actor Seeker as Job seeker
+    participant CLI
+    participant Search
+    participant Store
+    participant Report
+
+    Note over Seeker,Search: Precondition: preflight passed and the run is in progress, at any stage from listing to judging
+    Note over Search: a stage throws an exception that no typed value covers
+    Note over Search: the single catch of the pipeline turns it into a failed run with the cause unexpected error, and the message never holds CV text or the AI key
+    Note over Search: every read vacancy not yet accounted for becomes not judged with that cause, then the buckets are checked against the read count and a mismatch also makes the run failed
+    Search->>CLI: hands over the run result to print
+    CLI->>Report: renders the loud warning and the coverage report
+    alt the result is printed
+        Report-->>CLI: text ending with the RUN FAILED line
+        CLI-->>Seeker: prints the result
+        Search->>Store: marks the vacancies that were actually shown as seen
+        Note over Search,Store: persists only vacancies shown before the failure, and none if nothing was shown
+    else printing itself fails
+        CLI-->>Search: the presenter failed
+        Note over Search,Store: nothing is marked seen, so every vacancy comes back as new next time
+        CLI-->>Seeker: writes a plain message about the failure to the error stream
+    end
+    Search-->>CLI: final run status failed
+    CLI-->>Seeker: exits with a non-zero status
+    Note over Seeker,Search: Postcondition: a run that passed preflight ends with a coverage report whenever it can be printed, and never marks seen anything that was not shown
+```
+
+**Flags from the `sequences` pass (for `design`, `data-model` and `tasks`, nothing decided here):**
+
+- **Participants.** Flows 3 to 10 use the same participants as flows 1 and 2 (the §5 containers plus LinkedIn and Claude), so no participant is new. This follows the §6 intro and not the generic `<service>` vocabulary of the `sequences` skill, which the job seeker confirmed.
+- **Order.** Flows 1 and 2 were drawn at design and were left untouched, so flows 3 to 10 are appended after them and are not reordered to follow the §4 user stories.
+- **Persist notes for `data-model`.** The seen-memory schema is created on a clean start (flow 3). A shown vacancy is persisted with its identity (source name plus job number) and its repost fingerprint (flows 1, 2, 4 to 10). The write must be idempotent because show everything shows and re-marks vacancies already stored (flow 8). Lookups by identity and by fingerprint are the two read paths (flows 7 and 8).
+- **Preflight is split.** The CLI validates the inputs, the CV and the key, while opening the seen memory happens in Search (flows 1 and 3). `tasks` should keep both parts before the first request, and only the unusable-database failure exits with the failed-run status, the others with the usage-error status (§8).
+- **Reasons for "not judged".** Flows 2, 4, 6, 9 and 10 use these reasons: the source's stop cause (blocked, throttled, failed, empty), AI service stopped with its cause, unusable answer, judging limit and unexpected error. The `api` stage should fix their exact names.
+- **Not drawn as flows (pure rules, non-runtime).** The ordering and tag-group rules of AC-06 and the overlap, comparability and tag arithmetic of AC-13, AC-14, AC-15 and AC-15b live in `domain/filters.ts` and `report/` and are covered by offline unit tests. Flow 1 shows where they run.
+
 ## 7. Deployment view
 
 The tool runs as one Node 22 process on the job seeker's own machine, started by hand (`node dist/cli.js` or the `ai-vacancy-finder` bin entry); there is no server, container or schedule. Three things sit outside the code: the CV file, whose path the job seeker passes in; the AI key, read only from `ANTHROPIC_API_KEY`; and the seen database, a single SQLite file that defaults to `data/seen.sqlite` under the project root, resolved from the location of the compiled code and not from the current folder, so running from any folder reads the same memory (the same way the migration runner finds `migrations/`). A `--db <path>` flag overrides it. The file is already covered by the `*.sqlite` pattern in `.gitignore`; if WAL mode is ever turned on, its `-wal` and `-shm` files need patterns too. A missing file means a clean start (created and migrated); a file that exists but cannot be opened or migrated stops the run before any request, because a silent fresh memory would list everything as new.
