@@ -1,0 +1,59 @@
+{
+  "slug": "_scaffold",
+  "tasks": [
+    {
+      "id": "S1",
+      "title": "Create the project structure and the command-line entry point",
+      "layer": "scaffold",
+      "deps": [],
+      "acs": [],
+      "dod": "npm install succeeds; npm run build compiles with zero errors; the built CLI boots and prints help with exit code 0; .gitignore covers node_modules, dist, the local database file and .env",
+      "files_hint": ["package.json", "tsconfig.json", "src/cli.ts", "src/domain/", "src/sources/", "src/matching/", "src/store/", "src/report/", "migrations/", ".gitignore"]
+    },
+    {
+      "id": "S2",
+      "title": "Wire the test harness and a smoke test",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "npm test runs vitest and is green; a smoke test proves the CLI boots and prints help with exit code 0",
+      "files_hint": ["vitest.config.ts", "test/smoke.test.ts", "test/fixtures/"]
+    },
+    {
+      "id": "S3",
+      "title": "Set up the migration runner and an initial empty migration",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "the in-repo runner applies migrations/0001_baseline.up.sql to a temporary SQLite file and reverts it with 0001_baseline.down.sql; user_version goes 0 to 1 to 0; a test covers the round trip",
+      "files_hint": ["src/store/migrate.ts", "migrations/0001_baseline.up.sql", "migrations/0001_baseline.down.sql", "test/migrate.test.ts"]
+    },
+    {
+      "id": "S4",
+      "title": "Set up lint",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "npm run lint passes on the skeleton with zero errors",
+      "files_hint": ["eslint.config.js", "package.json"]
+    },
+    {
+      "id": "S5",
+      "title": "Add the CI workflow (lint, build, test)",
+      "layer": "scaffold",
+      "deps": ["S2", "S3", "S4"],
+      "acs": [],
+      "dod": "CI config is valid and runs npm ci, npm run lint, npm run build and npm test on Node 22; the commands match the machine keys in docs/architecture-map.md",
+      "files_hint": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "S6",
+      "title": "Write CLAUDE.md from the chosen conventions",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "CLAUDE.md states the commands, the three seams (source, fit judge, seen-store), the fail-loudly error rule, the offline-fixtures test rule and the secrets rule, and matches docs/architecture-map.md",
+      "files_hint": ["CLAUDE.md"]
+    }
+  ]
+}
