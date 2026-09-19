@@ -38,7 +38,8 @@ target_surfaces: [cli]
 - One developer, who is also the only user. No effort budget or hard date is quoted; the only time signal is "useful within days" (spec §1), which is why v1 is one person, one CV, one source, run on demand.
 
 **Conventions.**
-- `CLAUDE.md` and `docs/architecture-map.md` (Conventions): a failing or empty source raises a typed error the coverage report shows and nothing is swallowed; a vacancy is the source name plus the site's own job number with a company-plus-title fingerprint beside it; migrations are numbered `.up.sql` / `.down.sql` pairs; the AI key comes only from `ANTHROPIC_API_KEY`; relative imports in `src/` and `test/` end in `.js`.
+- `CLAUDE.md` and `docs/architecture-map.md` (Conventions): a failing or empty source is reported as a typed error in the coverage report and nothing is swallowed (the repo's wording is that the source "raises" it, see the deviation below); a vacancy is the source name plus the site's own job number with a company-plus-title fingerprint beside it; migrations are numbered `.up.sql` / `.down.sql` pairs; the AI key comes only from `ANTHROPIC_API_KEY`; relative imports in `src/` and `test/` end in `.js`.
+- Deviation, recorded in §11 and `adr/0002-return-source-failures-as-values-alongside-partial-results.md`: this feature returns a source's typed stop as a value next to what it did read instead of raising it, so that partial results survive a stop. The spirit of the repo rule (typed, never swallowed, always reported) is kept; the wording of `CLAUDE.md` and the map is not changed by design.
 
 **Regulatory / external.**
 - Reading LinkedIn's public pages is against its terms and may be blocked; the job seeker accepted this knowingly (`docs/idea-brief.md` §6).
@@ -100,8 +101,8 @@ C4Context
 
 1. **Preflight** — validate the inputs (AC-02), read the CV (AC-03), require the AI key (AC-05) and open the seen database. Any failure stops here, before a single request, with a plain message.
 2. **List** — the source returns cards, an optional expected count and an optional stop (ADR 0001, 0002).
-3. **Classify on cards** — drop what is certainly older than the posted-since date, skip vacancies already shown (by source name plus job number) and reposts (by company plus title), and check salary when the card states it. Each read vacancy gets its disposition in the AC-10 order (ADR 0003).
-4. **Order** — candidates go newest first; with "show everything", new ones first and then those shown before, newest first (AC-17, AC-21).
+3. **Classify on cards** — drop what is certainly older than the posted-since date, skip vacancies already shown (by source name plus job number) and reposts (by company plus title) unless "show everything" is on, and check salary when the card states it. With "show everything" on, seen vacancies and reposts stay candidates, marked "seen before" or "repost", so that a wrongly skipped opening can always be found (AC-17, AC-20); a search without it states how many it skipped as reposts. Each read vacancy gets its disposition in the AC-10 order (ADR 0003).
+4. **Order** — candidates go newest first; with "show everything", new ones first and then all those recognised as shown before (seen or repost), newest first; they are judged again and count toward the limit (AC-17, AC-21).
 5. **Hydrate and judge, one vacancy at a time** — fetch the full vacancy, check its salary if the card did not state it, judge it, and stop when the judging limit is filled, the candidates run out, or judging fails at service level (ADR 0004).
 6. **Close the accounts** — every vacancy not reached becomes "not judged" with its cause.
 7. **Render** — the list (untagged vacancies by fit, then tagged ones by fit), the loud warnings and the coverage report, all derived from the dispositions.
@@ -119,7 +120,7 @@ One Node process built from plain modules behind three small seams (vacancy sour
 src/
 ├── cli.ts                   composition root: parse args, read the CV, wire adapters, call runSearch, print, exit status
 ├── domain/                  zod schemas and pure rules, no I/O
-│   ├── vacancy.ts             Vacancy (filled progressively), PostedDate (exact | range | unknown), Salary
+│   ├── vacancy.ts             Vacancy (filled progressively), PostedDate (exact | range | unknown), Salary, partial-description flag
 │   ├── search-input.ts        SearchInput and its validation messages
 │   ├── filters.ts             date and salary rules: overlap, comparability, tags
 │   ├── disposition.ts         the closed set of dispositions and the run result
@@ -141,7 +142,7 @@ src/
 └── report/                    pure rendering: list, warnings, coverage report
 ```
 
-**Shape of the shared vacancy (`adr/0007-model-a-posted-date-as-exact-range-or-unknown.md`).** One `Vacancy` type serves both a card and a hydrated vacancy; its description is empty until it is hydrated. A posted date is an exact date, a range (earliest and latest possible) or unknown. A vacancy is dropped for date only when even its latest possible date is before the posted-since date; a range that straddles that date is kept and tagged "date approximate"; an unknown date is tagged "date not listed"; ordering uses the middle of a range. A salary is a minimum and maximum with a currency and a period.
+**Shape of the shared vacancy (`adr/0007-model-a-posted-date-as-exact-range-or-unknown.md`).** One `Vacancy` type serves both a card and a hydrated vacancy; its description is empty until it is hydrated. A posted date is an exact date, a range (earliest and latest possible) or unknown. A vacancy is dropped for date only when even its latest possible date is before the posted-since date; a range that straddles that date is kept and tagged "date approximate"; an unknown date is tagged "date not listed"; ordering uses the middle of a range. A salary is a minimum and maximum with a currency and a period. A vacancy also carries a partial-description flag, set only by the source when the page itself shows a sign that the text is cut off (a "show more" marker, a cut-off, a sign-in gate over the text) and never guessed from the length of the text; the report adds "fit based on a partial description" to that vacancy's line (AC-08). Which sign the real pages show belongs to the open question in §11.
 
 **C4 Container (L2):**
 
@@ -204,7 +205,7 @@ sequenceDiagram
     Sources-->>Search: cards and the expected count if the site states one
     Search->>Store: asks which cards are already shown or reposts
     Store-->>Search: seen and repost matches
-    Note over Search: drops by date, skips seen and reposts, orders newest first
+    Note over Search: drops by date, skips seen and reposts unless show everything is on, orders newest first
     loop until the judging limit is filled or the candidates run out
         Search->>Sources: hydrates the next candidate
         Sources->>LinkedIn: reads the detail page
@@ -280,7 +281,7 @@ CI runs on GitHub Actions (Ubuntu, Node 22): `npm ci`, lint, build and test, off
 | Error handling | Expected conditions are typed values: source stops (ADR 0002) and judge failure classes (ADR 0004). `zod` validates every boundary: the search input, the CV, parsed pages and the judge's answer. One catch in the pipeline turns an unexpected exception into a failed run that is still reported. Nothing is swallowed. `CLAUDE.md` says a source "raises" a typed error; ADR 0002 keeps its spirit and needs a one-sentence wording update when implemented. | ADR 0002, ADR 0004, `CLAUDE.md` Rules |
 | Secrets and authorisation | The AI key comes only from `ANTHROPIC_API_KEY` and is never printed or written to a file. No account of the job seeker is ever signed in to a source; a sign-in page means "blocked". | spec §6.1, `CLAUDE.md` Rules |
 | Privacy of the CV | The CV text is sent as it is to the Claude API with each judgment and is never logged, printed or stored; the seen memory holds only identity and repost fingerprint. Preflight looks for email and phone patterns and, if found, prints one warning that contact details in the CV go to the AI service with every judgment, then continues. It never prints the matched text. This is a reminder, not protection: names, addresses and handles are not detected, so a contact-free copy remains the job seeker's duty. | spec §6.1, here |
-| Untrusted vacancy text | Vacancy text is data. It goes into a delimited block of the prompt, the judge is told to treat it as data and reports whether it contained instructions, and nothing outside the judge acts on it. | ADR 0004, AC-09 |
+| Untrusted vacancy text | Vacancy text is data. It goes into a delimited block of the prompt, the judge is told to treat it as data and reports whether it contained instructions, and nothing outside the judge acts on it. A partial-description flag set by the source from a sign on the page itself, never from the length of the text, makes the report say that the fit rests on a partial description. | ADR 0004, AC-08, AC-09 |
 | ID strategy | A vacancy is the source name plus the site's own job number. The repost fingerprint is company plus title, lowercased with repeated spaces collapsed and nothing else normalised. Two vacancies read in the same search are never reposts of each other. | repo ADR 0003, AC-19 |
 | Time and pace | An injected `Clock` (now, sleep) drives request pace, back-off, the run duration in the coverage report and "today" for the date rules; tests use a fake clock. | ADR 0006 |
 | Salary comparison | An overlap with the salary range, even partial, is kept; a single figure is a range of zero width, "from X" is X and up, "up to X" is 0 to X. A stated pay is compared only when its currency and period match the range's; otherwise it is kept and tagged "pay not comparable". No conversion. | spec §1 decision override, AC-13, §2 |
@@ -311,7 +312,7 @@ Each top-3 goal from §1 expanded into a scenario, plus two further scenarios fr
 
 **QG-1. Auditable runs**
 - **When:** a search ends, whatever the outcome: success, a source blocked, throttled, failed or empty, an AI service failure, or an unexpected exception.
-- **Then:** it ends with the coverage report, in which the buckets add up to the read count. A loud warning above it names any source that stopped, and the run shows `RUN FAILED` with a non-zero exit status. A bare empty list is never printed. 100% of runs end with a coverage report, including failed runs.
+- **Then:** it ends with the coverage report, in which the buckets add up to the read count. When a source stopped (blocked, throttled, failed or empty) or judging failed at service level, a loud warning above the report names the cause and the run shows `RUN FAILED` with a non-zero exit status. A run that read vacancies and lists none because all were already seen, reposts or dropped by the filters is not failed and says so (AC-16), and a partial-read warning alone does not fail the run (AC-12). A bare empty list is never printed. 100% of runs end with a coverage report, including failed runs.
 - **How verify:** automated tests through `runSearch` with a fake source and a fake judge for every failure mode, asserting the report, the sum, the `RUN FAILED` line and the exit status; a test that every source stop kind reaches the report (ADR 0002, ADR 0003).
 
 **QG-2. Bounded cost and polite pace**
@@ -348,7 +349,7 @@ Each top-3 goal from §1 expanded into a scenario, plus two further scenarios fr
 | The one-time security review of exactly what leaves the machine is not done yet (spec §6.1) | Medium | Do it before the first real run with a full CV, before `sdd:ship`; preflight also warns when the CV looks like it holds contact details (§8) | Serhii Lyzun |
 | `better-sqlite3` is a native library pinned to the 12.x line: 13.0.3's prebuilt binary segfaults on Node 22.9.0; a machine with no matching prebuilt binary needs a build toolchain | Low | Keep `^12.10.1`; re-test before moving to 13 (`CLAUDE.md` Gotchas) | Serhii Lyzun |
 | Lazy hydration makes "not judged (limit)" imprecise (it can include vacancies the salary filter would have dropped), and a shown vacancy whose salary is only on its detail page counts as seen, not as dropped for salary | Low | The report wording says so; recorded in ADR 0001 | Serhii Lyzun |
-| Documents drift from this design: `CLAUDE.md` still says a source "raises" a typed error (ADR 0002), `docs/architecture-map.md` lacks `src/search/` and `src/sources/http.ts`, and spec §6 does not say whether "100% of runs end with a coverage report" includes searches rejected before reading (§10 reads it as runs that passed preflight) | Low | Update the `CLAUDE.md` sentence when implementing; refresh the map with the next `survey`; confirm the reading of §6 at the next spec touch | Serhii Lyzun |
+| Documents drift from this design: `CLAUDE.md` still says a source "raises" a typed error (ADR 0002), `docs/architecture-map.md` lacks `src/search/` and `src/sources/http.ts`, the first open question in spec §8 is still unchecked with its due date "before `sdd:design`" although this design moved it to §11 with a new due date, and spec §6 does not say whether "100% of runs end with a coverage report" includes searches rejected before reading (§10 reads it as runs that passed preflight) | Low | Update the `CLAUDE.md` sentence when implementing; refresh the map with the next `survey`; at the next spec touch, update the due date of spec §8's first question to "before `sdd:implement`" and confirm the reading of §6 | Serhii Lyzun |
 
 **Accepted debt (acceptable in v1, plan to fix later):**
 - Judgments run one after another; concurrency is a later lever if the budget is threatened.
