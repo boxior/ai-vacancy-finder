@@ -358,4 +358,34 @@ Each top-3 goal from §1 expanded into a scenario, plus two further scenarios fr
 
 ## 12. Glossary
 
-<!-- pending -->
+Terms from `docs/features/ai-vacancy-finder/CONTEXT.md` (canonical) that appear in this document:
+
+| Term | Meaning |
+|---|---|
+| Coverage report | The closing section of every run that states how many vacancies were read, dropped, judged and not judged, and warns loudly when a source returned nothing or too little. Not the vacancy list. |
+| CV | The job seeker's own text document that every fit judgment is made against. Not a vacancy or a cover letter. |
+| Date approximate | The tag on a vacancy that shows only a rough age, so its posted date could fall inside or outside the window; it is kept and shown below untagged vacancies. |
+| Date not listed | The tag on a vacancy that shows no posted date or age at all; it is kept, shown in the tagged group and counted as kept without a stated date. |
+| Fit | How well a vacancy matches the CV, a score with a one-line reason. Filters drop vacancies; fit only orders them. |
+| Job seeker | The one person who runs a search with their own CV. Not an account holder or applicant. |
+| Judging limit | The most vacancies one search may send to fit judgment, with a default the job seeker can override for a single search. Vacancies over it are not dropped, not judged and not marked seen. |
+| Read | A vacancy the tool successfully parsed from a source into the shared vacancy shape; every read vacancy is counted in exactly one coverage-report bucket. |
+| Repost | The same job published again under a new date or number, recognised by company plus title. |
+| Salary not listed | The tag on a vacancy that states no pay, kept and shown below confirmed ones. |
+| Search | One run for a position, salary range, posted-since date and location or remote. Not the seen memory that persists between runs. |
+| Seen | A vacancy already shown to the job seeker in an earlier run. Not merely read, filtered out or left unjudged. |
+| Source | A site whose public vacancy pages the tool reads. Not the CV. |
+| Vacancy | One job posting read from a source, identified by source name plus the site's own job number. |
+
+Terms introduced by this design (not yet in `CONTEXT.md`; a `glossary` follow-up should add them):
+
+| Term | Meaning |
+|---|---|
+| Pay not comparable | The tag on a vacancy whose stated pay has a currency or period that does not match the salary range's; it is kept and shown in the tagged group. Not Salary not listed, which is for no stated pay. |
+| Card | The short listing of a vacancy on a results page (job number, title, company, usually a rough age); a vacancy that has not been hydrated yet. |
+| Hydrate | Fetch a vacancy's detail page so that its full description (and its pay, if only shown there) is filled in; done lazily, only for vacancies about to be judged. |
+| Disposition | The one final outcome of a read vacancy in a run: dropped for date, dropped for salary, seen, repost, not judged with a reason, or judged. |
+| Stop | The typed reason a source ended early or returned nothing: blocked, throttled, failed or empty. |
+| Seam | One of the three small interfaces (vacancy source, fit judge, seen-store) through which everything else reaches an adapter. |
+| Preflight | The checks made before any request: the inputs, the CV, the AI key and the seen database. A failure stops the run before reading anything. |
+| Run failed | A run that ends with a `RUN FAILED` line in its coverage report and a non-zero exit status. |
