@@ -293,7 +293,17 @@ CI runs on GitHub Actions (Ubuntu, Node 22): `npm ci`, lint, build and test, off
 
 ## 9. Architecture decisions
 
-<!-- pending -->
+| # | Title | Status | Section |
+|---|---|---|---|
+| 0001 | Read sources in two phases, hydrating vacancies lazily | Accepted | §4 |
+| 0002 | Return source failures as values alongside partial results | Accepted | §4 |
+| 0003 | Record one disposition per read vacancy and derive the report from them | Accepted | §4 |
+| 0004 | Judge each vacancy in its own schema-checked call | Accepted | §4 |
+| 0005 | Run the search pipeline in its own module with adapters passed in | Accepted | §5 |
+| 0006 | Share one polite HTTP client across sources, with an injected clock | Accepted | §5 |
+| 0007 | Model a posted date as exact, a range, or unknown | Accepted | §5 |
+
+ADR files live under `docs/features/ai-vacancy-finder/adr/NNNN-<title>.md`. The repo-level decisions this feature builds on are `docs/adr/0001-use-typescript-on-node-22.md`, `docs/adr/0002-organize-code-as-one-folder-per-vacancy-source.md` and `docs/adr/0003-keep-seen-memory-in-a-local-sqlite-file.md`.
 
 ## 10. Quality requirements
 
