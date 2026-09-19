@@ -307,7 +307,32 @@ ADR files live under `docs/features/ai-vacancy-finder/adr/NNNN-<title>.md`. The 
 
 ## 10. Quality requirements
 
-<!-- pending -->
+Each top-3 goal from §1 expanded into a scenario, plus two further scenarios from spec §6 and §6.1. Every number is copied from spec §6. "Run" below means a search that passed preflight: a search rejected before reading (AC-02, AC-03, AC-05) reads nothing and prints only its message.
+
+**QG-1. Auditable runs**
+- **When:** a search ends, whatever the outcome: success, a source blocked, throttled, failed or empty, an AI service failure, or an unexpected exception.
+- **Then:** it ends with the coverage report, in which the buckets add up to the read count. A loud warning above it names any source that stopped, and the run shows `RUN FAILED` with a non-zero exit status. A bare empty list is never printed. 100% of runs end with a coverage report, including failed runs.
+- **How verify:** automated tests through `runSearch` with a fake source and a fake judge for every failure mode, asserting the report, the sum, the `RUN FAILED` line and the exit status; a test that every source stop kind reaches the report (ADR 0002, ADR 0003).
+
+**QG-2. Bounded cost and polite pace**
+- **When:** a search runs at the default judging limit against a source with more candidates than the limit, or against a source that refuses requests.
+- **Then:** at most the judging limit (default 30) judgments are made in 100% of runs. Requests are at most 1 page request per second, counted for each source separately. A refused request is retried at most 3 times with at most 1 min of total waiting per source, then the source is reported as throttled. A search takes at most 5 min p95 at the default judging limit.
+- **How verify:** an offline test with a fake judge that counts its calls; offline tests against a fake clock for the pace and for the back-off (ADR 0006); the run duration printed in the coverage report, watched over real use.
+
+**QG-3. Seen-memory correctness**
+- **When:** consecutive searches with the same details run without "show everything", including reposts of vacancies already shown.
+- **Then:** 0 vacancies are listed twice across consecutive same-detail searches. A repost is counted as a repost and not listed as new, and only vacancies that were shown count as seen.
+- **How verify:** an offline test that runs twice through `runSearch` over saved pages with a real SQLite store, plus a case with the same company and title under a new job number.
+
+**QG-4. Fit consistency**
+- **When:** the same vacancy and CV are judged twice.
+- **Then:** the two fits differ by at most 1 point on a 1–10 scale in at least 90% of pairs.
+- **How verify:** the job seeker's spot-check of 20 pairs in the first two weeks (spec §6); the design lever is the rubric with anchor descriptions and one call per vacancy (ADR 0004).
+
+**QG-5. Confidentiality of the CV and the key**
+- **When:** any run, including every failure mode.
+- **Then:** neither the AI key nor CV text appears in the list, the coverage report, an error message or the seen database; the only outward flow of CV text is to the Claude API with each judgment.
+- **How verify:** an automated test with a sentinel CV text and a sentinel key across success and every failure mode, asserting that neither appears in stdout, stderr or the database; the one-time security review before the first real run with a full CV (spec §6.1).
 
 ## 11. Risks and technical debt
 
